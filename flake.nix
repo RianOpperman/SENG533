@@ -20,6 +20,8 @@
         scripts = [
           (mkScript "up" ''docker compose up -d'')
           (mkScript "down" ''docker compose down --timeout 0'')
+          (mkScript "k" ''kubectl "$@"'')
+          (mkScript "m" ''minikube "$@"'')
         ];
       in {
         default = pkgs.mkShell {
@@ -30,6 +32,10 @@
             minikube
             kubernetes-helm
           ] ++ scripts;
+
+          shellHook = ''
+            alias k='kubectl'
+          '';
         };
       });
   };

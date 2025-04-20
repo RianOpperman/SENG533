@@ -340,6 +340,85 @@ spec:
             - containerPort: 15692
 ---
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kieker-analysis-config
+data:
+  analysis-config.properties: |
+    # read from RabbitMQ
+    kieker.monitoring.reader = AMQP
+    kieker.monitoring.reader.AMQP.inputQueueName = kieker.records
+    kieker.monitoring.reader.AMQP.host = teastore-amqp
+    kieker.monitoring.reader.AMQP.port = 5672
+    kieker.monitoring.reader.AMQP.username = guest
+    kieker.monitoring.reader.AMQP.password = guest
+    kieker.monitoring.reader.AMQP.vhost = /
+
+    # export to Prometheus
+    kieker.analysis.controller.pipeline = prometheus
+    kieker.analysis.prometheus.host = 0.0.0.0
+    kieker.analysis.prometheus.port = 9095
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kieker-exporter
+  labels:
+    app: kieker-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kieker-exporter
+  template:
+    metadata:
+      labels:
+        app: kieker-exporter
+    spec:
+      containers:
+        - name: kieker-exporter
+          image: openjdk:17
+          command:
+            - sh
+            - -c
+            - |
+              # install wget, fetch the analysis jar, then run
+              apt-get update && apt-get install -y wget \
+              && wget -qO /analysis.jar \
+                   https://repo1.maven.org/maven2/org/kieker/analysis/1.16.0/analysis-1.16.0-jar-with-dependencies.jar \
+              && exec java -cp /analysis.jar \
+                   kieker.analysis.AnalysisController \
+                   -con /config/analysis-config.properties
+          ports:
+            - name: metrics
+              containerPort: 9095
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      restartPolicy: Always
+      volumes:
+        - name: config
+          configMap:
+            name: kieker-analysis-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kieker-exporter
+  labels:
+    app: kieker-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app: kieker-exporter
+  ports:
+    - name: metrics
+      port: 9095
+      targetPort: 9095
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: teastore-amqp
@@ -382,15 +461,19 @@ data:
     scrape_configs:
       - job_name: 'rabbitmq'
         static_configs:
-          - targets: ['teastore-amqp:15692']
+          - targets: ['teastore-amqp:9095']
         metrics_path: /metrics
-      - job_name: 'kubernetes-pods'
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: ['__meta_kubernetes_pod_label_app']
-            regex: 'teastore.*'
-            action: keep
+      - job_name: 'kieker'
+        static_configs:
+          - targets: ['kieker-exporter:9095']
+        metrics_path: /metrics
+#      - job_name: 'kubernetes-pods'
+#        kubernetes_sd_configs:
+#          - role: pod
+#        relabel_configs:
+#          - source_labels: ['__meta_kubernetes_pod_label_app']
+#            regex: 'teastore.*'
+#            action: keep
 ---
 apiVersion: apps/v1
 kind: Deployment

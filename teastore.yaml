@@ -306,6 +306,22 @@ spec:
               value: "teastore-amqp"
 
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: teastore-webui
+  labels:
+    app: teastore
+    run: teastore-webui
+spec:
+  type: NodePort
+  selector:
+    run: teastore-webui
+  ports:
+    - name: ui
+      port: 8080
+      targetPort: 8080
+---
 # ========= Teastore: AMQP broker (metrics plugin bootstrap) =========
 apiVersion: apps/v1
 kind: Deployment
@@ -342,81 +358,124 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kieker-analysis-config
+  name: kieker-py-exporter-script
 data:
-  analysis-config.properties: |
-    # read from RabbitMQ
-    kieker.monitoring.reader = AMQP
-    kieker.monitoring.reader.AMQP.inputQueueName = kieker.records
-    kieker.monitoring.reader.AMQP.host = teastore-amqp
-    kieker.monitoring.reader.AMQP.port = 5672
-    kieker.monitoring.reader.AMQP.username = guest
-    kieker.monitoring.reader.AMQP.password = guest
-    kieker.monitoring.reader.AMQP.vhost = /
+  exporter.py: |-
+    #!/usr/bin/env python3
+    import os, json
+    import pika
+    from prometheus_client import start_http_server, Histogram, Counter
 
-    # export to Prometheus
-    kieker.analysis.controller.pipeline = prometheus
-    kieker.analysis.prometheus.host = 0.0.0.0
-    kieker.analysis.prometheus.port = 9095
+    RABBIT_HOST = os.getenv("RABBIT_HOST", "teastore-amqp")
+    RABBIT_PORT = int(os.getenv("RABBIT_PORT", "5672"))
+    QUEUE       = os.getenv("QUEUE", "kieker.records")
+
+    # Histograms and counters, labeled by the operation signature
+    latency_hist = Histogram(
+      "kp_operation_latency_seconds",
+      "Operation latency in seconds",
+      ["operation"],
+    )
+    request_ctr  = Counter(
+      "kp_requests_total",
+      "Total Kieker OperationExecutionRecord count",
+      ["operation"],
+    )
+
+    def on_message(ch, method, props, body):
+        try:
+            rec = json.loads(body)
+            tin  = rec.get("tin",0)
+            tout = rec.get("tout",0)
+            op   = rec.get("operationSignature","unknown")
+            # convert nanoseconds → seconds
+            latency = max(0.0, (tout - tin) / 1e9)
+            latency_hist.labels(operation=op).observe(latency)
+            request_ctr.labels(operation=op).inc()
+        except Exception:
+            pass  # ignore malformed
+
+    def main():
+        # connect to RabbitMQ
+        creds  = pika.PlainCredentials("admin", "nimda")
+        params = pika.ConnectionParameters(RABBIT_HOST, RABBIT_PORT, "/", creds)
+        conn   = pika.BlockingConnection(params)
+        ch     = conn.channel()
+        ch.queue_declare(queue=QUEUE, durable=True)
+        
+        # assume queue already exists
+        ch.basic_consume(queue=QUEUE, on_message_callback=on_message, auto_ack=True)
+        # start Prometheus HTTP server
+        start_http_server(8000)
+        print("Kieker‐Py exporter listening on :8000/metrics, AMQP:", RABBIT_HOST, RABBIT_PORT)
+        ch.start_consuming()
+
+    if __name__ == "__main__":
+        main()
 
 ---
+# === 2) Python exporter Deployment ==============================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kieker-exporter
+  name: kieker-py-exporter
   labels:
-    app: kieker-exporter
+    app: kieker-py-exporter
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kieker-exporter
+      app: kieker-py-exporter
   template:
     metadata:
       labels:
-        app: kieker-exporter
+        app: kieker-py-exporter
     spec:
       containers:
-        - name: kieker-exporter
-          image: openjdk:17
-          command:
-            - sh
-            - -c
+        - name: kieker-py-exporter
+          # a lightweight Python image
+          image: python:3.10-slim
+          # install dependencies, drop in the script, then run it
+          command: [ "sh", "-c" ]
+          args:
             - |
-              # install wget, fetch the analysis jar, then run
-              apt-get update && apt-get install -y wget \
-              && wget -qO /analysis.jar \
-                   https://repo1.maven.org/maven2/org/kieker/analysis/1.16.0/analysis-1.16.0-jar-with-dependencies.jar \
-              && exec java -cp /analysis.jar \
-                   kieker.analysis.AnalysisController \
-                   -con /config/analysis-config.properties
+              pip install pika prometheus_client && \
+              python /scripts/exporter.py
+          env:
+            - name: RABBIT_HOST
+              value: "teastore-amqp"
+            - name: RABBIT_PORT
+              value: "5672"
+            - name: QUEUE
+              value: "kieker.records"
           ports:
             - name: metrics
-              containerPort: 9095
+              containerPort: 8000
           volumeMounts:
-            - name: config
-              mountPath: /config
-      restartPolicy: Always
+            - name: scripts
+              mountPath: /scripts
       volumes:
-        - name: config
+        - name: scripts
           configMap:
-            name: kieker-analysis-config
+            name: kieker-py-exporter-script
 
 ---
+# === 3) Python exporter Service =================================================
 apiVersion: v1
 kind: Service
 metadata:
-  name: kieker-exporter
+  name: kieker-py-exporter
   labels:
-    app: kieker-exporter
+    app: kieker-py-exporter
 spec:
   type: ClusterIP
   selector:
-    app: kieker-exporter
+    app: kieker-py-exporter
   ports:
     - name: metrics
-      port: 9095
-      targetPort: 9095
+      port: 8000
+      targetPort: 8000
+
 ---
 apiVersion: v1
 kind: Service
@@ -465,7 +524,7 @@ data:
         metrics_path: /metrics
       - job_name: 'kieker'
         static_configs:
-          - targets: ['kieker-exporter:9095']
+          - targets: ['kieker-py-exporter:8000']
         metrics_path: /metrics
 #      - job_name: 'kubernetes-pods'
 #        kubernetes_sd_configs:

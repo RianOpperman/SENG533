@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: mem-stress
+spec:
+  selector:
+    matchLabels: {app: mem-stress}
+  template:
+    metadata:
+      labels: {app: mem-stress}
+    spec:
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: stress-ng
+          image: alpine
+          command: [ "sh","-c" ]
+          args:
+            - apk add --no-cache stress-ng && \
+              stress-ng --vm 1 --vm-bytes 1G --timeout 300s
+          resources:
+            requests: {memory: "128Mi"}
+            limits:   {memory: "2Gi"}

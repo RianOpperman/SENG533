@@ -20,6 +20,9 @@
         scripts = [
           (mkScript "up" ''docker compose up -d'')
           (mkScript "down" ''docker compose down --timeout 0'')
+          (mkScript "k" ''kubectl "$@"'')
+          (mkScript "m" ''minikube "$@"'')
+          (mkScript "i" ''istioctl "$@"'')
         ];
       in {
         default = pkgs.mkShell {
@@ -29,6 +32,7 @@
             kubernetes
             minikube
             kubernetes-helm
+            istioctl
           ] ++ scripts;
         };
       });

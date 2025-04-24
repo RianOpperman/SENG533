@@ -1,0 +1,657 @@
+# ---
+# # ========= Prometheus RBAC =========
+# apiVersion: v1
+# kind: ServiceAccount
+# metadata:
+#   name: prometheus
+#   namespace: default
+# ---
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRole
+# metadata:
+#   name: prometheus
+# rules:
+#   - apiGroups: [""]
+#     resources: ["nodes","services","endpoints","pods"]
+#     verbs: ["get","list","watch"]
+#   - apiGroups: ["extensions","apps"]
+#     resources: ["deployments","daemonsets","replicasets"]
+#     verbs: ["get","list","watch"]
+#   - nonResourceURLs: ["/metrics"]
+#     verbs: ["get"]
+# ---
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata:
+#   name: prometheus
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: ClusterRole
+#   name: prometheus
+# subjects:
+#   - kind: ServiceAccount
+#     name: prometheus
+#     namespace: default
+
+--- # ========= Teastore: Database =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-db
+  labels:
+    app: teastore
+    run: teastore-db
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-db
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-db
+    spec:
+      containers:
+        - name: teastore-db
+          image: descartesresearch/teastore-db
+          ports:
+            - containerPort: 3306
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: teastore-db
+  labels:
+    app: teastore
+    run: teastore-db
+spec:
+  ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    run: teastore-db
+
+--- # ========= Teastore: Registry =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-registry
+  labels:
+    app: teastore
+    run: teastore-registry
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-registry
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-registry
+    spec:
+      containers:
+        - name: teastore-registry
+          image: descartesresearch/teastore-registry
+          ports:
+            - containerPort: 8080
+          env:
+            - name: USE_POD_IP
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: teastore-registry
+  labels:
+    app: teastore
+    run: teastore-registry
+spec:
+  ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    run: teastore-registry
+
+--- # ========= Teastore: Persistence =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-persistence
+  labels:
+    app: teastore
+    run: teastore-persistence
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-persistence
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-persistence
+    spec:
+      initContainers:
+        - name: wait-for-amqp
+          image: busybox
+          command: ["sh","-c","until nc -z teastore-amqp 5672; do sleep 2; done"]
+      containers:
+        - name: teastore-persistence
+          image: descartesresearch/teastore-persistence
+          ports:
+            - containerPort: 8080
+          env:
+            - name: USE_POD_IP
+              value: "true"
+            - name: REGISTRY_HOST
+              value: "teastore-registry"
+            - name: DB_HOST
+              value: "teastore-db"
+            - name: DB_PORT
+              value: "3306"
+            - name: RABBITMQ_HOST
+              value: "teastore-amqp"
+
+--- # ========= Teastore: Auth =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-auth
+  labels:
+    app: teastore
+    run: teastore-auth
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-auth
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-auth
+    spec:
+      initContainers:
+        - name: wait-for-amqp
+          image: busybox
+          command: ["sh","-c","until nc -z teastore-amqp 5672; do sleep 2; done"]
+      containers:
+        - name: teastore-auth
+          image: descartesresearch/teastore-auth
+          ports:
+            - containerPort: 8080
+          env:
+            - name: USE_POD_IP
+              value: "true"
+            - name: REGISTRY_HOST
+              value: "teastore-registry"
+            - name: RABBITMQ_HOST
+              value: "teastore-amqp"
+
+--- # ========= Teastore: Image =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-image
+  labels:
+    app: teastore
+    run: teastore-image
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-image
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-image
+    spec:
+      initContainers:
+        - name: wait-for-amqp
+          image: busybox
+          command: ["sh","-c","until nc -z teastore-amqp 5672; do sleep 2; done"]
+      containers:
+        - name: teastore-image
+          image: descartesresearch/teastore-image
+          ports:
+            - containerPort: 8080
+          env:
+            - name: USE_POD_IP
+              value: "true"
+            - name: REGISTRY_HOST
+              value: "teastore-registry"
+            - name: RABBITMQ_HOST
+              value: "teastore-amqp"
+
+--- # ========= Teastore: Recommender =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-recommender
+  labels:
+    app: teastore
+    run: teastore-recommender
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-recommender
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-recommender
+    spec:
+      initContainers:
+        - name: wait-for-amqp
+          image: busybox
+          command: ["sh","-c","until nc -z teastore-amqp 5672; do sleep 2; done"]
+      containers:
+        - name: teastore-recommender
+          image: descartesresearch/teastore-recommender
+          ports:
+            - containerPort: 8080
+          env:
+            - name: USE_POD_IP
+              value: "true"
+            - name: REGISTRY_HOST
+              value: "teastore-registry"
+            - name: RABBITMQ_HOST
+              value: "teastore-amqp"
+
+--- # ========= Teastore: WebUI =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-webui
+  labels:
+    app: teastore
+    run: teastore-webui
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-webui
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-webui
+    spec:
+      initContainers:
+        - name: wait-for-amqp
+          image: busybox
+          command: ["sh","-c","until nc -z teastore-amqp 5672; do sleep 2; done"]
+      containers:
+        - name: teastore-webui
+          image: descartesresearch/teastore-webui
+          ports:
+            - containerPort: 8080
+          env:
+            - name: USE_POD_IP
+              value: "true"
+            - name: REGISTRY_HOST
+              value: "teastore-registry"
+            - name: RABBITMQ_HOST
+              value: "teastore-amqp"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: teastore-webui
+  labels:
+    app: teastore
+    run: teastore-webui
+spec:
+  type: NodePort
+  selector:
+    run: teastore-webui
+  ports:
+    - name: ui
+      port: 8080
+      targetPort: 8080
+
+--- # ========= Teastore: AMQP broker (metrics plugin bootstrap) =========
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: teastore-amqp
+  labels:
+    app: teastore
+    run: teastore-amqp
+spec:
+  selector:
+    matchLabels:
+      app: teastore
+      run: teastore-amqp
+  template:
+    metadata:
+      labels:
+        app: teastore
+        run: teastore-amqp
+    spec:
+      containers:
+        - name: teastore-amqp
+          image: descartesresearch/teastore-kieker-rabbitmq
+          command: ["/bin/sh","-c"]
+          args:
+            - |
+              rabbitmq-plugins enable rabbitmq_management rabbitmq_prometheus && \
+              exec docker-entrypoint.sh rabbitmq-server
+          ports:
+            - containerPort: 5672
+            - containerPort: 8080
+            - containerPort: 15672
+            - containerPort: 15692
+# ---
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: kieker-py-exporter-script
+# data:
+#   exporter.py: |-
+#     #!/usr/bin/env python3
+#     import os, json
+#     import pika
+#     from prometheus_client import start_http_server, Histogram, Counter
+
+#     RABBIT_HOST = os.getenv("RABBIT_HOST", "teastore-amqp")
+#     RABBIT_PORT = int(os.getenv("RABBIT_PORT", "5672"))
+#     QUEUE       = os.getenv("QUEUE", "kieker.records")
+
+#     # Histograms and counters, labeled by the operation signature
+#     latency_hist = Histogram(
+#       "kp_operation_latency_seconds",
+#       "Operation latency in seconds",
+#       ["operation"],
+#     )
+#     request_ctr  = Counter(
+#       "kp_requests_total",
+#       "Total Kieker OperationExecutionRecord count",
+#       ["operation"],
+#     )
+
+#     def on_message(ch, method, props, body):
+#         try:
+#             rec = json.loads(body)
+#             tin  = rec.get("tin",0)
+#             tout = rec.get("tout",0)
+#             op   = rec.get("operationSignature","unknown")
+#             # convert nanoseconds → seconds
+#             latency = max(0.0, (tout - tin) / 1e9)
+#             latency_hist.labels(operation=op).observe(latency)
+#             request_ctr.labels(operation=op).inc()
+#         except Exception:
+#             pass  # ignore malformed
+
+#     def main():
+#         # connect to RabbitMQ
+#         creds  = pika.PlainCredentials("admin", "nimda")
+#         params = pika.ConnectionParameters(RABBIT_HOST, RABBIT_PORT, "/", creds)
+#         conn   = pika.BlockingConnection(params)
+#         ch     = conn.channel()
+#         ch.queue_declare(queue=QUEUE, durable=True)
+        
+#         # assume queue already exists
+#         ch.basic_consume(queue=QUEUE, on_message_callback=on_message, auto_ack=True)
+#         # start Prometheus HTTP server
+#         start_http_server(8000)
+#         print("Kieker‐Py exporter listening on :8000/metrics, AMQP:", RABBIT_HOST, RABBIT_PORT)
+#         ch.start_consuming()
+
+#     if __name__ == "__main__":
+#         main()
+
+# ---
+# # === 2) Python exporter Deployment ==============================================
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: kieker-py-exporter
+#   labels:
+#     app: kieker-py-exporter
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: kieker-py-exporter
+#   template:
+#     metadata:
+#       labels:
+#         app: kieker-py-exporter
+#     spec:
+#       containers:
+#         - name: kieker-py-exporter
+#           # a lightweight Python image
+#           image: python:3.10-slim
+#           # install dependencies, drop in the script, then run it
+#           command: [ "sh", "-c" ]
+#           args:
+#             - |
+#               pip install pika prometheus_client && \
+#               python /scripts/exporter.py
+#           env:
+#             - name: RABBIT_HOST
+#               value: "teastore-amqp"
+#             - name: RABBIT_PORT
+#               value: "5672"
+#             - name: QUEUE
+#               value: "kieker.records"
+#           ports:
+#             - name: metrics
+#               containerPort: 8000
+#           volumeMounts:
+#             - name: scripts
+#               mountPath: /scripts
+#       volumes:
+#         - name: scripts
+#           configMap:
+#             name: kieker-py-exporter-script
+
+# ---
+# # === 3) Python exporter Service =================================================
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: kieker-py-exporter
+#   labels:
+#     app: kieker-py-exporter
+# spec:
+#   type: ClusterIP
+#   selector:
+#     app: kieker-py-exporter
+#   ports:
+#     - name: metrics
+#       port: 8000
+#       targetPort: 8000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: teastore-amqp
+  labels:
+    app: teastore
+    run: teastore-amqp
+spec:
+  type: NodePort
+  selector:
+    run: teastore-amqp
+  ports:
+    - name: webui-port
+      port: 8080
+      targetPort: 8080
+      # nodePort: 30081
+    - name: rabbitmq-port
+      port: 5672
+      targetPort: 5672
+      # nodePort: 30473
+    - name: management
+      port: 15672
+      targetPort: 15672
+      # nodePort: 30192
+    - name: metrics
+      port: 15692
+      targetPort: 15692
+
+# --- # ========= Prometheus config & deployment =========
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: prometheus-config
+#   labels:
+#     app: prometheus
+# data:
+#   prometheus.yml: |
+#     global:
+#       scrape_interval: 15s
+#     scrape_configs:
+#       - job_name: 'rabbitmq'
+#         static_configs:
+#           - targets: ['teastore-amqp:9095']
+#         metrics_path: /metrics
+#       - job_name: 'kieker'
+#         static_configs:
+#           - targets: ['kieker-py-exporter:8000']
+#         metrics_path: /metrics
+# #      - job_name: 'kubernetes-pods'
+# #        kubernetes_sd_configs:
+# #          - role: pod
+# #        relabel_configs:
+# #          - source_labels: ['__meta_kubernetes_pod_label_app']
+# #            regex: 'teastore.*'
+# #            action: keep
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: prometheus
+#   labels:
+#     app: prometheus
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: prometheus
+#   template:
+#     metadata:
+#       labels:
+#         app: prometheus
+#     spec:
+#       serviceAccountName: prometheus
+#       containers:
+#         - name: prometheus
+#           image: prom/prometheus:latest
+#           args:
+#             - "--config.file=/etc/prometheus/prometheus.yml"
+#           ports:
+#             - containerPort: 9090
+#           volumeMounts:
+#             - name: config
+#               mountPath: /etc/prometheus
+#       volumes:
+#         - name: config
+#           configMap:
+#             name: prometheus-config
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: prometheus
+#   labels:
+#     app: prometheus
+# spec:
+#   type: NodePort
+#   selector:
+#     app: prometheus
+#   ports:
+#     - name: ui
+#       port: 9090
+#       targetPort: 9090
+#       nodePort: 30090
+
+# ---
+# # ========= Grafana: PVC, Datasource, Deployment & Service =========
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: grafana-data
+#   labels:
+#     app: grafana
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   resources:
+#     requests:
+#       storage: 1Gi
+# ---
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: grafana-datasources
+#   labels:
+#     app: grafana
+# data:
+#   datasources.yaml: |
+#     apiVersion: 1
+#     datasources:
+#       - name: Prometheus
+#         type: prometheus
+#         access: proxy
+#         url: http://prometheus:9090
+#         isDefault: true
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: grafana
+#   labels:
+#     app: grafana
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: grafana
+#   template:
+#     metadata:
+#       labels:
+#         app: grafana
+#     spec:
+#       containers:
+#         - name: grafana
+#           image: grafana/grafana:latest
+#           ports:
+#             - containerPort: 3000
+#           volumeMounts:
+#             - name: grafana-storage
+#               mountPath: /var/lib/grafana
+#             - name: grafana-datasources
+#               mountPath: /etc/grafana/provisioning/datasources
+#       volumes:
+#         - name: grafana-storage
+#           persistentVolumeClaim:
+#             claimName: grafana-data
+#         - name: grafana-datasources
+#           configMap:
+#             name: grafana-datasources
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: grafana
+#   labels:
+#     app: grafana
+# spec:
+#   type: NodePort
+#   selector:
+#     app: grafana
+#   ports:
+#     - name: ui
+#       port: 3000
+#       targetPort: 3000
+#       nodePort: 30000
+

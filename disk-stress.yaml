@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: disk-stress
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      name: disk-stress
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: disk-stress
+          image: alpine
+          command:
+            - sh
+            - -c
+            - |
+              dd if=/dev/zero of=/mnt/testfile bs=1M count=1024 oflag=direct
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: io-volume
+              mountPath: /mnt
+      volumes:
+        - name: io-volume
+          emptyDir: {}

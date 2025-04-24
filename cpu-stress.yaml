@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cpu-stress
+spec:
+  selector:
+    matchLabels: {app: cpu-stress}
+  template:
+    metadata:
+      labels: {app: cpu-stress}
+    spec:
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: stress
+          image: progrium/stress
+          args: ["--cpu","2","--timeout","300s"]
+          resources:
+            requests: {cpu: "100m"}
+            limits:   {cpu: "2"}

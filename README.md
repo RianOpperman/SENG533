@@ -25,3 +25,8 @@ kubectl apply -f dashboards
 ```
 
 To view the available dashboards please use `istioctl dashboard`.
+
+## Results
+
+Results are stored in the `results` folder and are organized per factor, workload & user count, i.e. it
+follows the format: `<factor>/<workload>/<user count>`.

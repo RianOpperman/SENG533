@@ -141,7 +141,7 @@ services:
   #   depends_on:
   #     - rabbitmq
   #   networks:
-  #     - teastore-network 
+  #     - teastore-network
 
   # prometheus:
   #   image: prom/prometheus:latest

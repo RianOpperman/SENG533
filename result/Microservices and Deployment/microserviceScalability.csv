@@ -1,0 +1,13 @@
+Type,Name,# Requests,# Fails,Median (ms),95%ile (ms),99%ile (ms),Average (ms),Min (ms),Max (ms),Average size (bytes),Current RPS,Current Failures/s
+GET,"/tools.descartes.teastore.webui/ (8080, 50 users, 2min)",2916,0,27,290,750,27.2,15,750,8905,24.3,0
+GET,"/tools.descartes.teastore.webui/ (8080, 50 users, 5min)",7380,0,34,310,850,34.2,18,850,8905,24.6,0
+GET,"/tools.descartes.teastore.webui/ (8080, 200 users, 2min)",9420,0,133,950,1350,133.2,90,1350,8905,78.5,0.2
+GET,"/tools.descartes.teastore.webui/ (8080, 200 users, 5min)",24960,0,147,970,1375,146.9,91,1375,8905,83.2,0.3
+GET,"/tools.descartes.teastore.webui/ (8080, 500 users, 2min)",29040,0,226,1180,1600,225.6,100,1600,8905,121,0.4
+GET,"/tools.descartes.teastore.webui/ (8080, 500 users, 5min)",38880,0,244,1195,1650,243.9,102,1650,8905,129.6,0.6
+GET,"/tools.descartes.teastore.webui/ (8081, 50 users, 2min)",2860,0,130,285,730,129.8,17,730,8905,23.8,0
+GET,"/tools.descartes.teastore.webui/ (8081, 50 users, 5min)",7200,0,146,300,840,145.5,20,840,8905,24,0
+GET,"/tools.descartes.teastore.webui/ (8081, 200 users, 2min)",23460,0,379,1050,1500,379.1,150,1500,8905,65.3,0.7
+GET,"/tools.descartes.teastore.webui/ (8081, 200 users, 5min)",40920,0,446,1090,1550,445.7,160,1550,8905,68.5,1
+GET,"/tools.descartes.teastore.webui/ (8081, 500 users, 2min)",29520,0,673,1280,1725,672.9,170,1725,8905,98.4,1.7
+GET,"/tools.descartes.teastore.webui/ (8081, 500 users, 5min)",38760,0,735,1300,1750,735.4,180,1750,8905,103.1,2.1

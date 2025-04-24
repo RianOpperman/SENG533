@@ -1,0 +1,7 @@
+Type,Name,# Fails,Median (ms),Average (ms),Average size (bytes),Current RPS,Current Failures/s
+GET,/tools.descartes.teastore.webui/,0,18.4,18.4,8905,24.6,0
+GET,/tools.descartes.teastore.webui/,0,25.7,25.7,8905,24.2,0
+GET,/tools.descartes.teastore.webui/,0,144.1,144.1,8905,83.9,0.4
+GET,/tools.descartes.teastore.webui/,0,487.1,487.1,8905,67.1,1.1
+GET,/tools.descartes.teastore.webui/,0,243.9,243.9,8905,129.6,0.6
+GET,/tools.descartes.teastore.webui/,0,735.4,735.4,8905,103.1,2.1
